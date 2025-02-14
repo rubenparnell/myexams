@@ -1,0 +1,260 @@
+<!DOCTYPE html> 
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyExams</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #fff;
+            color: black;
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        .menu {
+            position: absolute;
+            top: 49px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        .score-card {
+            z-index: 2;
+            display: inline-block;
+            min-width: 100px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .main-card {
+            position: relative;
+            z-index: 1;
+            margin-top: 150px;
+        }
+    </style>
+</head>
+<body class="text-center">
+    <canvas id="fabricCanvas"></canvas>
+
+    <button id="menuToggle" class="btn btn-secondary" style="position: absolute; top: 10px; left: 10px; z-index: 11;">Settings</button>
+    <div class="menu" id="settingsMenu" style="display: none;">
+        <label>Number of Balls: <input type="range" id="ballCount" value="200" min="10" max="3000"></label><br>
+        <label>Speed: <input type="range" id="ballSpeed" value="2.5" min="0.5" max="9" step="0.1"></label><br>
+        <label>Cursor Radius: <input type="range" id="cursorRadius" value="250" min="50" max="500"></label><br>
+    </div>
+
+    <div class="container">
+        <div id="card-container" class="card shadow p-4 main-card">
+            <h1 class="text-primary">Welcome to My Exams</h1>
+            <p class="lead">Select a feature:</p>
+            <div class="d-grid gap-3">
+                <a href="https://questions.myexams.net" class="btn btn-primary">Questions</a>
+                <a href="https://countdown.myexams.net" class="btn btn-primary">Exam Countdown</a>
+            </div>
+        </div>
+        <div class="card score-card p-3 shadow m-2">
+            <h3>Score</h3>
+            <div id="score" class="display-4">0</div>
+        </div>
+    </div>
+
+    <script>
+        const menuToggle = document.getElementById("menuToggle");
+        const settingsMenu = document.getElementById("settingsMenu");
+        menuToggle.addEventListener("click", () => {
+            settingsMenu.style.display = settingsMenu.style.display === "none" ? "block" : "none";
+        });
+
+        document.getElementById("ballCount").addEventListener("input", updateSettings);
+        document.getElementById("ballSpeed").addEventListener("input", updateSettings);
+        document.getElementById("cursorRadius").addEventListener("input", updateSettings);
+
+        function updateSettings() {
+            particleCount = parseInt(document.getElementById("ballCount").value);
+            particleSpeed = parseFloat(document.getElementById("ballSpeed").value);
+            mouse.radius = parseInt(document.getElementById("cursorRadius").value);
+        
+            particles.forEach(particle => {
+                particle.setSpeed();  // Use the method to reset the speed properly
+            });
+        
+            init();  // Reinitialize to reflect the new settings
+        }        
+
+        const canvas = document.getElementById("fabricCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        let score = 0;
+        const scoreDisplay = document.getElementById("score");
+        const mouse = { x: null, y: null, radius: 250 };
+        const cards = document.querySelectorAll(".card");
+        let cardRects = [];
+
+        particleCount = parseInt(document.getElementById("ballCount").value);
+        particleSpeed = parseFloat(document.getElementById("ballSpeed").value);
+        mouse.radius = parseInt(document.getElementById("cursorRadius").value);
+
+
+        function updateCardRects() {
+            cardRects = Array.from(cards).map(card => card.getBoundingClientRect());
+        }
+
+        class Particle {
+            constructor() {
+                this.radius = Math.random() * 6 + 4;
+                this.color = "#0d6efd"; 
+            
+                do {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                } while (this.isInsideAnyCard());
+            
+                this.setSpeed();
+            }            
+        
+            setSpeed() {
+                const angle = Math.random() * Math.PI * 2;
+                let speed = particleSpeed * (0.5 + Math.random() * 0.5); // Ensure some variation but no zero speed
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+            }            
+        
+            move() {
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < mouse.radius) {
+                    let forceDirectionX = dx / distance;
+                    let forceDirectionY = dy / distance;
+                    let force = (mouse.radius - distance) / mouse.radius;
+                    this.x -= forceDirectionX * force * 5;
+                    this.y -= forceDirectionY * force * 5;
+                }
+        
+                this.x += this.vx;
+                this.y += this.vy;
+        
+                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
+                    this.vx = -this.vx;
+                    this.respawn();
+                }
+                if (this.y - this.radius < 0 || this.y + this.radius > canvas.height) {
+                    this.vy = -this.vy;
+                    this.respawn();
+                }
+        
+                cardRects.forEach(rect => {
+                    if (
+                        this.x + this.radius > rect.left &&
+                        this.x - this.radius < rect.right &&
+                        this.y + this.radius > rect.top &&
+                        this.y - this.radius < rect.bottom
+                    ) {
+                        const dxL = Math.abs(this.x - rect.left);
+                        const dxR = Math.abs(this.x - rect.right);
+                        const dyT = Math.abs(this.y - rect.top);
+                        const dyB = Math.abs(this.y - rect.bottom);
+        
+                        const minDist = Math.min(dxL, dxR, dyT, dyB);
+        
+                        if (minDist === dxL || minDist === dxR) {
+                            this.vx = -this.vx;
+                        } else {
+                            this.vy = -this.vy;
+                        }
+        
+                        this.keepOutside(rect);
+                    }
+                });
+            }
+        
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        
+            respawn() {
+                score++;
+                scoreDisplay.textContent = score;
+            
+                do {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                } while (this.isInsideAnyCard());
+            
+                this.setSpeed();
+            }            
+        
+            isInsideAnyCard() {
+                return cardRects.some(rect =>
+                    this.x > rect.left - this.radius &&
+                    this.x < rect.right + this.radius &&
+                    this.y > rect.top - this.radius &&
+                    this.y < rect.bottom + this.radius
+                );
+            }
+        
+            keepOutside(rect) {
+                if (this.x < rect.left) this.x = rect.left - this.radius;
+                if (this.x > rect.right) this.x = rect.right + this.radius;
+                if (this.y < rect.top) this.y = rect.top - this.radius;
+                if (this.y > rect.bottom) this.y = rect.bottom + this.radius;
+            }
+        }
+        
+        // Move init function here after the Particle class definition
+        function init() {
+            updateCardRects();
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(particle => {
+                particle.move();
+                particle.draw();
+            });
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener("resize", () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            updateCardRects();
+            init();
+        });
+
+        window.addEventListener("mousemove", event => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+
+        window.addEventListener("mouseout", () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
