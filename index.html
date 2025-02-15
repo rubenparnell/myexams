@@ -11,6 +11,7 @@
             overflow: hidden;
             background: #fff;
             color: black;
+            touch-action: manipulation;
         }
         canvas {
             position: fixed;
@@ -42,6 +43,12 @@
             z-index: 1;
             margin-top: 150px;
         }
+        #menuToggle {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 11;
+        }
     </style>
 </head>
 <body class="text-center">
@@ -50,8 +57,8 @@
     <button id="menuToggle" class="btn btn-secondary" style="position: absolute; top: 10px; left: 10px; z-index: 11;">Settings</button>
     <div class="menu" id="settingsMenu" style="display: none;">
         <label>Number of Balls: <input type="range" id="ballCount" value="200" min="10" max="3000"></label><br>
-        <label>Speed: <input type="range" id="ballSpeed" value="2.5" min="0.5" max="9" step="0.1"></label><br>
-        <label>Cursor Radius: <input type="range" id="cursorRadius" value="250" min="50" max="500"></label><br>
+        <label>Speed: <input type="range" id="ballSpeed" value="0.7" min="0.1" max="9" step="0.1"></label><br>
+        <label>Cursor Radius: <input type="range" id="cursorRadius" value="100" min="20" max="500"></label><br>
     </div>
 
     <div class="container">
@@ -63,7 +70,7 @@
                 <a href="https://countdown.myexams.net" class="btn btn-primary">Exam Countdown</a>
             </div>
         </div>
-        <div class="card score-card p-3 shadow m-2">
+        <div class="card score-card p-3 shadow m-4">
             <h3>Score</h3>
             <div id="score" class="display-4">0</div>
         </div>
@@ -100,14 +107,13 @@
         let particles = [];
         let score = 0;
         const scoreDisplay = document.getElementById("score");
-        const mouse = { x: null, y: null, radius: 250 };
+        const mouse = { x: null, y: null, radius: 150 };
         const cards = document.querySelectorAll(".card");
         let cardRects = [];
 
         particleCount = parseInt(document.getElementById("ballCount").value);
         particleSpeed = parseFloat(document.getElementById("ballSpeed").value);
         mouse.radius = parseInt(document.getElementById("cursorRadius").value);
-
 
         function updateCardRects() {
             cardRects = Array.from(cards).map(card => card.getBoundingClientRect());
@@ -117,18 +123,15 @@
             constructor() {
                 this.radius = Math.random() * 6 + 4;
                 this.color = "#0d6efd"; 
-            
-                do {
-                    this.x = Math.random() * canvas.width;
-                    this.y = Math.random() * canvas.height;
-                } while (this.isInsideAnyCard());
-            
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
                 this.setSpeed();
-            }            
+                this.pushedByMouse = false; // Track if the particle was pushed by the mouse
+            }
         
             setSpeed() {
                 const angle = Math.random() * Math.PI * 2;
-                let speed = particleSpeed * (0.5 + Math.random() * 0.5); // Ensure some variation but no zero speed
+                let speed = particleSpeed * (0.5 + Math.random() * 0.5);
                 this.vx = Math.cos(angle) * speed;
                 this.vy = Math.sin(angle) * speed;
             }            
@@ -137,24 +140,31 @@
                 let dx = mouse.x - this.x;
                 let dy = mouse.y - this.y;
                 let distance = Math.sqrt(dx * dx + dy * dy);
+                
                 if (distance < mouse.radius) {
                     let forceDirectionX = dx / distance;
                     let forceDirectionY = dy / distance;
                     let force = (mouse.radius - distance) / mouse.radius;
                     this.x -= forceDirectionX * force * 5;
                     this.y -= forceDirectionY * force * 5;
+                    this.pushedByMouse = true;  // Mark as pushed
                 }
         
                 this.x += this.vx;
                 this.y += this.vy;
         
+                // Check if off-screen only if pushed by mouse
+                if (this.pushedByMouse && (this.x < -this.radius || this.x > canvas.width + this.radius || 
+                    this.y < -this.radius || this.y > canvas.height + this.radius)) {
+                    this.respawn();
+                }
+        
+                // Bounce off walls
                 if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
                     this.vx = -this.vx;
-                    this.respawn();
                 }
                 if (this.y - this.radius < 0 || this.y + this.radius > canvas.height) {
                     this.vy = -this.vy;
-                    this.respawn();
                 }
         
                 cardRects.forEach(rect => {
@@ -218,7 +228,6 @@
             }
         }
         
-        // Move init function here after the Particle class definition
         function init() {
             updateCardRects();
             particles = [];
@@ -248,7 +257,13 @@
             mouse.y = event.y;
         });
 
-        window.addEventListener("mouseout", () => {
+        window.addEventListener("touchmove", event => {
+            let touch = event.touches[0];
+            mouse.x = touch.clientX;
+            mouse.y = touch.clientY;
+        });
+
+        window.addEventListener("touchend", () => {
             mouse.x = null;
             mouse.y = null;
         });
